@@ -1,0 +1,43 @@
+{
+  "team": "Transaction Management",
+  "manager": "Hannah Shipman",
+  "senior_manager": "Matt McCollum",
+  "members": [
+    {
+      "name": "Sarah Scotia",
+      "email": "sarah.scotia@opendoor.com",
+      "role": "TC",
+      "manager": "Hannah Shipman"
+    },
+    {
+      "name": "Daniel Beaudette",
+      "email": "daniel.beaudette@opendoor.com",
+      "role": "TC",
+      "manager": "Hannah Shipman"
+    },
+    {
+      "name": "Kiara Tellez",
+      "email": "kiara.tellez@opendoor.com",
+      "role": "TC",
+      "manager": "Hannah Shipman"
+    },
+    {
+      "name": "Melina Encinas",
+      "email": "melina.encinas@opendoor.com",
+      "role": "TC",
+      "manager": "Hannah Shipman"
+    },
+    {
+      "name": "Lou Martinez",
+      "email": "lou.martinez@opendoor.com",
+      "role": "TC",
+      "manager": "Hannah Shipman"
+    },
+    {
+      "name": "Kylie Ottney",
+      "email": "kylie.ottney@opendoor.com",
+      "role": "TC",
+      "manager": "Hannah Shipman"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+[workload]
+name = "cx-support-daily"
+description = "Daily CX support standup pipeline. Pulls contact volume, open cases, SLA metrics."
+schedule = "daily"
+
+[data]
+scripts = ["scripts/query-cx-support-data.py"]
+cache_ttl = 3600
+
+[output]
+format = "slack"
+channel = "#cx-standup"
+
+[steps]
+skill = "cx-support-daily"
+prompt = "Run the daily CX support standup summary for today."

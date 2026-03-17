@@ -1,0 +1,37 @@
+{
+  "team": "Customer Support",
+  "manager": "Alixandra Miller",
+  "senior_manager": "Matt McCollum",
+  "members": [
+    {
+      "name": "Ingrid Pinheiro",
+      "email": "ingrid.pinheiro@opendoor.com",
+      "role": "XA",
+      "manager": "Alixandra Miller"
+    },
+    {
+      "name": "Christopher Lewis",
+      "email": "christopher.lewis@opendoor.com",
+      "role": "XA",
+      "manager": "Alixandra Miller"
+    },
+    {
+      "name": "Davie Gabayan",
+      "email": "davie.gabayan@opendoor.com",
+      "role": "XA",
+      "manager": "Alixandra Miller"
+    },
+    {
+      "name": "Celeste Blea",
+      "email": "celeste.blea@opendoor.com",
+      "role": "XA",
+      "manager": "Alixandra Miller"
+    },
+    {
+      "name": "Cameron Cruz",
+      "email": "cameron.cruz@opendoor.com",
+      "role": "XA",
+      "manager": "Alixandra Miller"
+    }
+  ]
+}

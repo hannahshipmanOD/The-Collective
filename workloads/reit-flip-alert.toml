@@ -1,0 +1,20 @@
+[workload]
+name = "reit-flip-alert"
+description = "Daily alert: properties in pre-reno flip states with an active REIT resale contract."
+schedule = "weekdays-8am-PT"
+
+[data]
+scripts = ["scripts/query-reit-flip-alert.py"]
+
+[output]
+format = "slack-dm"
+recipient = "U45HRF2QL"  # Matt McCollum
+
+[notes]
+query_runtime = "~20 seconds"
+filters = [
+  "flip_state IN (contingencies_released, late_checkout, pre_renovation, in_renovation)",
+  "listing_offer.state = in_contract",
+  "listing_offer.channel = reit",
+]
+sort = "contract_execution_date DESC"

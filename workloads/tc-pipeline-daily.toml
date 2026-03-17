@@ -1,0 +1,16 @@
+[workload]
+name = "tc-pipeline-daily"
+description = "Daily TC pipeline standup. Shows pipeline by TC, closing this week, at-risk deals."
+schedule = "daily"
+
+[data]
+scripts = ["scripts/query-tc-pipeline-data.py"]
+cache_ttl = 3600
+
+[output]
+format = "slack"
+channel = "#tc-standup"
+
+[steps]
+skill = "tc-pipeline-daily"
+prompt = "Run the daily TC pipeline standup summary for today."
