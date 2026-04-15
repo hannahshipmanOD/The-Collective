@@ -7,7 +7,7 @@ on:
 
 jobs:
   superdojo-sync:
-    runs-on: runner-sm-ng
+    runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
