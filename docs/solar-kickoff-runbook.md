@@ -1,7 +1,7 @@
 # Solar Kickoff Agent — Runbook & Learnings
 
 ## Overview
-The Solar Kickoff Agent automatically sends a "Solar Documentation Needed" email to sellers when solar is detected on a property. It uses two complementary triggers to ensure the kickoff always sends regardless of whether the Zendesk Acquisition ticket or the Snowflake task is detected first — and guarantees no duplicate emails.
+The Solar Kickoff Agent automatically sends a "Solar Documentation Needed" email to sellers when solar is detected on a property via a new Zendesk Solar Escalation (Acquisition) ticket. It assigns kickoff tickets to Jess Young or Britt Kato in round-robin, cross-links both tickets, sets the Acquisition ticket to On Hold (with re-verification), and guarantees no duplicate emails are ever sent.
 
 ---
 
@@ -9,13 +9,13 @@ The Solar Kickoff Agent automatically sends a "Solar Documentation Needed" email
 
 | Item | ID |
 |---|---|
-| CEP Email form | `13386574321179` ✅ CORRECT |
-| Solar Transaction Coordination form | `14088199798683` ❌ WRONG for kickoff tickets |
-| Support group | `1900001769264` ✅ CORRECT |
-| Solar group | `32544318853659` ❌ WRONG for kickoff tickets |
-| Jessica Young (Jess Young) | `1266768018530` |
-| Britt Kato | `1266776989269` |
-| Hannah Shipman | `1266801247709` |
+| **CEP Email form** | `13386574321179` ✅ CORRECT form for all kickoff tickets |
+| Solar Transaction Coordination form | `14088199798683` ❌ WRONG — do NOT use for kickoff tickets |
+| **Support group** | `1900001769264` ✅ CORRECT group for all kickoff tickets |
+| Solar group | `32544318853659` ❌ WRONG — do NOT use for kickoff tickets |
+| Jess Young | `1266768018530` (jessica.young@opendoor.com) |
+| Britt Kato | `1266776989269` (brittney.kato@opendoor.com) |
+| Hannah Shipman | `1266801247709` (Slack: `UPF9A23DF`) |
 | Flip Token ZD field | `9707317021979` (on Acquisition tickets) |
 
 ---
@@ -25,7 +25,7 @@ The Solar Kickoff Agent automatically sends a "Solar Documentation Needed" email
 | Ticket | On Creation | After Cross-Link | When Seller Replies |
 |---|---|---|---|
 | **Kickoff email ticket** | Solved ✅ | Stays Solved ✅ | Open ✅ (auto via ZD trigger) |
-| **Acquisition ticket** | N/A | **On Hold** ✅ | N/A |
+| **Acquisition ticket** | N/A | **On Hold** ✅ (re-verified after setting) | N/A |
 
 Note: The Zendesk trigger "Set: Status to open when ticket replied to" automatically reopens the kickoff ticket when a seller responds. This is intentional and desired behavior.
 
@@ -34,47 +34,67 @@ Note: The Zendesk trigger "Set: Status to open when ticket replied to" automatic
 ## Gumloop Triggers
 
 ### Trigger 1: Solar Kick Off — Acquisition Zendesk Ticketing
-**ID:** `dxGwvtcim5nU2xfcnyphD6`  
-**Previous IDs (disabled):** `aQtbHQ7WgVagdYCBuXFMi4`, `X3eoPYKc8viWsmYfRMBFn7`  
-**Type:** MCP trigger | Polls every 15 min  
+**ID:** `dxGwvtcim5nU2xfcnyphD6` | Polls every 15 min
+**Previous IDs (disabled):** `aQtbHQ7WgVagdYCBuXFMi4` → `X3eoPYKc8viWsmYfRMBFn7`
 
-**What it does:** Detects new Solar Escalation (Acquisition) tickets in Zendesk, looks up seller info in Snowflake, and either creates a kickoff + cross-links OR just cross-links if Trigger 2 already sent the kickoff.
+**What it does:** Detects new Solar Escalation (Acquisition) tickets in Zendesk, looks up seller info in Snowflake, and either creates a kickoff + cross-links, or just cross-links if a kickoff already exists. Always sets the Acquisition ticket to On Hold and re-verifies it stayed there.
 
 **Flow:**
-1. Poll Zendesk for Acquisition tickets (form `9982607579419`) created in last 48 hours with no kickoff comment
-2. Extract flip token from ZD field `9707317021979`
-3. Query Snowflake for seller info (`DWH.DW.AX_FLIPS` + `DWH.DW.AX_LEADS`)
-4. Check if kickoff already exists (search `solar_kickoff_auto` tickets, match by street address in Python)
-   - `action: create_and_link` → create kickoff (Solved) + cross-link + set Acquisition to **On Hold**
-   - `action: cross_link_only` → just add cross-link + set Acquisition to **On Hold**, no new email
+1. Poll Zendesk for new Solar Escalation (Acquisition) tickets (form `9982607579419`) created in last 48 hours
+2. For each, look up seller info in Snowflake using the flip token (ZD field `9707317021979`)
+3. Check if a kickoff already exists by searching `solar_kickoff_auto` tickets for matching street address (Python-side match, not ZD search filter):
+   - **`action: create_and_link`** — no kickoff yet → create kickoff (Solved) + cross-link + set Acquisition to **On Hold**, re-verify On Hold
+   - **`action: cross_link_only`** — kickoff already exists → add cross-links, no new email, set Acquisition to **On Hold**, re-verify On Hold
+   - **`action: no_seller_found`** — no Snowflake match → tag Acquisition ticket `solar_no_leads_match` for Trigger 4 monitoring
+
+**On Hold Re-Verify (added 2026-05-22):** After setting the Acquisition ticket to On Hold, Trigger 1 re-fetches the ticket and corrects it back to On Hold if Zendesk has flipped it to Open. This is the final step in both `create_and_link` and `cross_link_only` flows.
 
 ---
 
 ### Trigger 2: Solar Kick Off — Snowflake Safety Net
-**ID:** `NRjXsWxp4SuMbt3i4z3BPs`  
-**Type:** MCP trigger | Polls every 15 min  
+~~**ID:** `NRjXsWxp4SuMbt3i4z3BPs`~~ **DELETED 2026-05-22**
 
-**What it does:** Catches properties where a Snowflake `initiate_solar_escalation` task exists but no Zendesk Acquisition ticket has been created yet. Sends the kickoff email without cross-linking — Trigger 1 adds the link once the Acquisition ticket is eventually created.
+Previously auto-sent kickoff emails when a Snowflake `initiate_solar_escalation` task existed but no ZD Acquisition ticket had been created yet. Removed because:
+- The Solar team always creates a ZD Acquisition ticket before the kickoff is needed
+- Trigger 1 is the sole path for kickoff creation
+- Trigger 4 (below) provides visibility into any gaps without auto-sending emails
 
-**Flow:**
-1. Query Snowflake for `initiate_solar_escalation` tasks open for **30+ minutes** (gives Trigger 1 a head start)
-2. Check if kickoff already exists (street address match)
-3. If no kickoff → create kickoff (Solved, no cross-link)
-4. If kickoff exists → skip
-
-**Why 30-minute delay:** Prevents race conditions. If the ZD Acquisition ticket is created within 30 min, Trigger 1 fires first and handles everything cleanly.
+Analysis at deletion: ~3.7% of SF tasks never get a ZD ticket; median lag between SF task and ZD ticket creation is 46.5 hours. The team is comfortable with the delay.
 
 ---
 
 ### Trigger 3: Solar Kickoff — Assignment Safety Net
-**ID:** `SgS5cnjircWXYjcTqrFZou`  
-**Type:** MCP trigger | Polls every 15 min  
+**ID:** `SgS5cnjircWXYjcTqrFZou` | Polls every 15 min
 
 **What it does:** Auto-corrects Solar Kickoff tickets assigned to the wrong person or group.
 
 **Flow:**
-1. Find Solar Kickoff tickets NOT assigned to Jess or Britt
-2. Update in a single call: correct assignee + set group to Support (`1900001769264`)
+1. Poll Zendesk for Solar Kickoff tickets NOT assigned to Jess or Britt
+2. For each found, update in a single call:
+   - Correct assignee → Jess or Britt (per round-robin)
+   - Correct group → Support (`1900001769264`)
+
+---
+
+### Trigger 4: Solar Escalation Monitor — 72hr No ZD Ticket Alert
+**ID:** `5ULDL9NyE3EnS29REkff3Y` | Polls every 24 hours
+**Created:** 2026-05-22 (replaced Trigger 2)
+
+**What it does:** Alerts Hannah Shipman when a Snowflake `initiate_solar_escalation` task has been open 72+ hours with no ZD Solar Escalation (Acquisition) ticket created — provides visibility without auto-sending emails.
+
+**Flow:**
+1. Query Snowflake for `initiate_solar_escalation` tasks open 72+ hours
+2. For each, check if a ZD Acquisition ticket exists (flip token match against form `9982607579419`)
+3. If no ZD ticket found → send Slack DM to Hannah (`UPF9A23DF`) with flip token + full property address (`AX_FLIPS.ADDRESS_FULL`)
+4. Dedup: alerts once per day per flip token (tracks `last_alerted_utc` in state)
+5. Stops alerting once a ZD ticket appears or the SF task closes
+
+**DM format:**
+```
+☀️ Solar Escalation Alert - No ZD Ticket Created
+Flip Token: `{token}` | Property: {address}
+Task Opened: {date} UTC | Hours Open: {n} hrs
+```
 
 ---
 
@@ -82,9 +102,10 @@ Note: The Zendesk trigger "Set: Status to open when ticket replied to" automatic
 
 | ID | Status | Notes |
 |---|---|---|
-| `dxGwvtcim5nU2xfcnyphD6` | ✅ Active | Trigger 1 (ZD-first + dedup) |
-| `NRjXsWxp4SuMbt3i4z3BPs` | ✅ Active | Trigger 2 (Snowflake safety net) |
+| `dxGwvtcim5nU2xfcnyphD6` | ✅ Active | Trigger 1 (ZD-first, dedup, On Hold re-verify) |
 | `SgS5cnjircWXYjcTqrFZou` | ✅ Active | Trigger 3 (Assignment safety net) |
+| `5ULDL9NyE3EnS29REkff3Y` | ✅ Active | Trigger 4 (72hr no-ZD-ticket alert) |
+| `NRjXsWxp4SuMbt3i4z3BPs` | ❌ Deleted 2026-05-22 | Trigger 2 (Snowflake safety net — replaced by Trigger 4) |
 | `aQtbHQ7WgVagdYCBuXFMi4` | ❌ Disabled | Trigger 1 v2 (ZD-first, no dedup) |
 | `X3eoPYKc8viWsmYfRMBFn7` | ❌ Disabled | Trigger 1 v1 (Snowflake-first, wrong form/group) |
 
@@ -92,29 +113,31 @@ Note: The Zendesk trigger "Set: Status to open when ticket replied to" automatic
 
 ## Deduplication Logic
 
-Both Trigger 1 and Trigger 2 check for existing kickoffs before creating one:
+Trigger 1 checks for existing kickoffs before creating one:
 - Fetch all `solar_kickoff_auto` tagged tickets (limit 100)
-- Match by street address in the subject line using Python (Zendesk search filters are unreliable for multi-condition matching)
-- Result: a seller **never receives two kickoff emails** regardless of which trigger fires first
+- Match by street address in the subject line using Python (not Zendesk search, which is unreliable for multi-condition filtering)
+- If match found → cross-link only (no new email)
+- This guarantees a seller **never receives two kickoff emails**
 
 ---
 
 ## Round-Robin Assignment
 
-| Agent | ZD ID | Email |
+| Name | Zendesk ID | Email |
 |---|---|---|
 | Jess Young | `1266768018530` | jessica.young@opendoor.com |
 | Britt Kato | `1266776989269` | brittney.kato@opendoor.com |
 
-Last assigned: **Britt Kato** (#4209956) | Next: **Jess Young**
+Last assigned: **Britt Kato** (1266776989269) — ticket #4255226
+Next assignment: **Jess Young** (1266768018530)
 
 ---
 
 ## Snowflake Reference
 
-**Database:** `DWH`  
+**Database:** `DWH`
 **Key tables:**
-- `DWH.DW.AX_FLIPS` — property/flip info
+- `DWH.DW.AX_FLIPS` — property/flip info (includes `ADDRESS_FULL`)
 - `DWH.DW.AX_LEADS` — seller info
 - `DWH.DW.AX_FLIP_PARTICIPANTS` — TC info
 - `DWH.CASEY.DWH_TASKS_VIEW` — solar escalation tasks
@@ -130,21 +153,6 @@ WHERE f.TOKEN = '{flip_token}'
 QUALIFY ROW_NUMBER() OVER (PARTITION BY f.TOKEN ORDER BY l.CREATED_AT DESC) = 1 LIMIT 1
 ```
 
-**Task query (Trigger 2, 30-min delay):**
-```sql
-SELECT t.UUID, ro.OBJECT_ID AS flip_token, f.ADDRESS_FULL, l.FULL_NAME, l.EMAIL, p.ACQ_TC
-FROM DWH.CASEY.DWH_TASKS_VIEW t
-JOIN DWH.CASEY.DWH_RELATED_OBJECTS_VIEW ro ON t.UUID = ro.TASK_UUID AND ro.OBJECT_TYPE = 'flip'
-JOIN DWH.DW.AX_FLIPS f ON ro.OBJECT_ID = f.TOKEN
-LEFT JOIN DWH.DW.AX_LEADS l ON l.FLIP_TOKEN = f.TOKEN
-LEFT JOIN DWH.DW.AX_FLIP_PARTICIPANTS p ON p.TOKEN = f.TOKEN
-WHERE t.TASK_TYPE = 'initiate_solar_escalation'
-  AND t.STATUS = 'open'
-  AND f.FLIP_STATE NOT IN ('acq_withdrawn', 'acq_expired', 'pre_listing')
-  AND t.ACTIVE_AT <= DATEADD('minute', -30, CURRENT_TIMESTAMP())
-QUALIFY ROW_NUMBER() OVER (PARTITION BY ro.OBJECT_ID ORDER BY l.CREATED_AT DESC) = 1
-```
-
 ---
 
 ## Root Cause History
@@ -154,31 +162,39 @@ Original automation had wrong values hardcoded:
 - `ticket_form_id: 14088199798683` (Solar TC) → fixed to `13386574321179` (CEP Email)
 - `group_id: 32544318853659` (Solar) → fixed to `1900001769264` (Support)
 
-This caused kickoff tickets to appear in the Solar team’s Zendesk inbox.
+This caused kickoff tickets to appear in the Solar team's Zendesk inbox.
 
 ### Fix 2 (2026-04-29) — Timing Gap
-Original Snowflake-first trigger fired BEFORE the Zendesk Acquisition ticket existed, causing kickoffs to be sent without cross-links. Redesigned to:
-- **Trigger 1:** ZD-first — always creates kickoff AFTER Acquisition ticket exists → guaranteed cross-link
-- **Trigger 2:** Snowflake safety net — fires after 30-min delay if no ZD ticket yet, Trigger 1 handles cross-link later
+Original Snowflake-first trigger fired BEFORE the Zendesk Acquisition ticket existed, causing kickoffs to be sent without cross-links. Redesigned to Zendesk-first (Trigger 1) with Snowflake safety net (Trigger 2, later deleted).
+
+### Fix 3 (2026-05-22) — On Hold Re-Verify
+Zendesk was occasionally flipping Acquisition tickets back to Open immediately after Trigger 1 set them to On Hold. Added a re-fetch and re-correction step as the final action in both `create_and_link` and `cross_link_only` flows.
+
+### Trigger 2 Deletion (2026-05-22)
+Analysis showed the Snowflake safety net was unnecessary — the Solar team reliably creates ZD Acquisition tickets. Replaced by Trigger 4 (passive alert to Hannah vs. auto-sending emails).
 
 ---
 
 ## Important Context
 
-- **Kickoff emails send from support@opendoor.com** (not solar@opendoor.com) — intentional, prevents seller replies routing to Solar team inbox
-- **Seller replies create new tickets** in the general support queue — expected behavior, Assignment Safety Net auto-corrects within 15 min
-- **Solar Transaction Coordination-create_ticket_from_incoming_email** ZD trigger is intentional — handles inbound emails to solar@opendoor.com, do not modify
-- **Zendesk search is unreliable for multi-condition tag filtering** — always use Python-side filtering when matching on multiple conditions
+- **Kickoff tickets belong to Jess/Britt, NOT the Solar team.** The Solar team has their own inbox and should never see kickoff tickets.
+- **The correct form is CEP Email** (`13386574321179`). Solar Transaction Coordination (`14088199798683`) is the wrong form and causes tickets to appear in the Solar team's inbox.
+- **The correct group is Support** (`1900001769264`). Never use the Solar group (`32544318853659`) for kickoff tickets.
+- **Kickoff emails send from support@opendoor.com** (not solar@opendoor.com) — intentional, prevents seller replies routing to Solar team inbox.
+- **Seller replies create new tickets** in the general support queue — expected behavior, Assignment Safety Net auto-corrects within 15 min.
+- **Solar Transaction Coordination-create_ticket_from_incoming_email** ZD trigger is intentional — handles inbound emails to solar@opendoor.com, do not modify.
+- **Zendesk search is unreliable for multi-condition tag filtering** — always use Python-side filtering when matching on multiple conditions.
+- **Inbound Solar TC tickets** (e.g., title companies emailing solar@opendoor.com) will NOT match as ZD Acquisition tickets — they use the wrong form, wrong group, and have no flip token populated. This is expected and correct behavior.
 
 ---
 
-## Pending Items (Zendesk Admin)
+## Pending Item (Zendesk Admin)
 
-**Recommended but not yet confirmed created:**  
-Trigger: `Solar Kickoff - Ensure CEP Email form on create`
-- Condition: Ticket created + Subject contains “Solar Documentation Needed” + Form ≠ CEP Email
-- Action: Set form → CEP Email (`13386574321179`)
+Recommended but not yet confirmed created:
+- **Trigger:** `Solar Kickoff - Ensure CEP Email form on create`
+- **Condition:** Ticket created + Subject contains "Solar Documentation Needed" + Form ≠ CEP Email
+- **Action:** Set form → CEP Email (`13386574321179`)
 
 ---
 
-*Last updated: 2026-04-29 by Solar Kickoff Agent (Gumloop)*
+*Last updated: 2026-06-08 by Solar Kickoff Agent (Gumloop)*
